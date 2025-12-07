@@ -1,0 +1,367 @@
+---
+title: "LIS 4317 Final Project – 311 Service Requests"
+author: "Aaron Norris, Connor Inglima, Divyani Tangudu, Kyla Garcia, Max De Cuba"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+!!!!EDIT EVERYTHING AS NEEDED!!!!
+!!!!EDIT EVERYTHING AS NEEDED!!!!
+PS: Don't follow directions if you feel there are better ways of doing so.
+
+```{r setup, include=FALSE}
+# Global chunk options
+knitr::opts_chunk$set(
+  echo       = TRUE,   # show code
+  message    = FALSE,
+  warning    = FALSE
+)
+
+# Load required libraries here.
+# TODO: Add any other packages individuals need for their sections.
+
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(readr)
+library(tm)
+library(wordcloud)
+library(RColorBrewer)
+library(stopwords)
+library(stringr)
+library(lubridate)
+library(janitor)
+
+```
+
+1. Project Overview
+
+Briefly describe the goal of the project and datasets used.
+
+Data sources: Gainesville and Miami 311 service requests
+
+Focus: data cleaning, analysis, heatmap visualization, and wordcloud text mining
+
+Each group member is responsible for a different part of the workflow.
+
+2. Load Data
+
+```{r Data Load}
+# TODO: Update file paths as needed. Data folder should be in the project directory.
+
+gainesville_raw <- read.csv("data/GainesvilleData_clean.csv", stringsAsFactors = FALSE)
+miami_raw <- read.csv("data/MiamiData_clean.csv", stringsAsFactors = FALSE)
+
+#Optional: quick glimpse at the data structures
+
+str(gainesville_raw)
+str(miami_raw)
+```
+
+3. Data Cleaning (Connor Inglima)
+3.1 Gainesville-Specific Cleaning
+
+```{r Gainesville Clean}
+
+# Gainsville Data
+# Clean column names into a new dataset
+GainesvilleData_clean <- GainesvilleData %>%
+  clean_names()
+
+# Keep only needed columns
+GainesvilleData_clean <- GainesvilleData_clean %>%
+  select(
+    id, status, request_type, description,
+    last_updated, closed,
+    minutes_to_acknowledge, minutes_to_close, days_to_close,
+    assigned_to, reporter_display,
+    address, latitude, longitude,
+    location, police_sector, commission_district
+  )
+
+# Clean up date and numeric columns
+GainesvilleData_clean <- GainesvilleData_clean %>%
+  mutate(
+    last_updated = mdy_hms(last_updated, quiet = TRUE),
+    closed = mdy_hms(closed, quiet = TRUE),
+    latitude = as.numeric(latitude),
+    longitude = as.numeric(longitude),
+    minutes_to_acknowledge = as.numeric(minutes_to_acknowledge),
+    minutes_to_close = as.numeric(minutes_to_close),
+    days_to_close = as.numeric(days_to_close)
+  )
+
+# Filter valid Gainesville rows
+GainesvilleData_clean <- GainesvilleData_clean %>%
+  filter(
+    !is.na(latitude),
+    !is.na(longitude),
+    !is.na(description),
+    !is.na(status),
+    status %in% c("Open", "Closed", "Archived")
+  )
+
+# Remove duplicate IDs
+GainesvilleData_clean <- GainesvilleData_clean %>%
+  distinct(id, .keep_all = TRUE)
+
+# Drop rows with NA in important columns
+GainesvilleData_clean <- GainesvilleData_clean %>%
+  drop_na(
+    description, status, latitude, longitude,
+    minutes_to_acknowledge, minutes_to_close, days_to_close,
+    assigned_to, reporter_display, address,
+    police_sector, commission_district
+  )
+
+# Remove ID and status ONLY at the end
+GainesvilleData_clean <- GainesvilleData_clean %>%
+  select(-id, -status)
+
+head(MiamiData_clean, 3)
+
+colnames(GainesvilleData_clean)
+colnames(MiamiData_clean)
+
+summary(nchar(GainesvilleData_clean$description))
+summary(nchar(MiamiData_clean$issue_description))
+
+write.csv(MiamiData_clean, "MiamiData_clean.csv", row.names = FALSE)
+write.csv(GainesvilleData_clean, "GainesvilleData_clean.csv", row.names = FALSE)
+```
+
+3.2 Miami-Specific Cleaning
+
+```{r Miami CLean}
+
+# Clean column names into a new dataset
+MiamiData_clean <- MiamiData %>% 
+  clean_names()
+
+# Keep only needed columns
+MiamiData_clean <- MiamiData_clean %>%
+  select(
+    ticket_id, issue_type, issue_description, ticket_status,
+    street_address, city, state, zip_code,
+    latitude, longitude,
+    ticket_created_date_time, ticket_closed_date_time,
+    goal_days, actual_completed_days, over_due_flag
+  )
+
+# Clean up date and numeric columns
+MiamiData_clean <- MiamiData_clean %>%
+  mutate(
+    ticket_created_date_time = ymd_hms(ticket_created_date_time),
+    ticket_closed_date_time  = ymd_hms(ticket_closed_date_time),
+    latitude  = as.numeric(latitude),
+    longitude = as.numeric(longitude),
+    goal_days = as.numeric(goal_days),
+    actual_completed_days = as.numeric(actual_completed_days)
+  )
+
+# Filter valid Miami rows
+MiamiData_clean <- MiamiData_clean %>%
+  filter(
+    tolower(city) == "miami",
+    state %in% c("FL", "Florida"),
+    !is.na(latitude),
+    !is.na(longitude),
+    ticket_status %in% c("OPEN", "CLOSED")
+  )
+
+# Remove duplicates
+MiamiData_clean <- MiamiData_clean %>% 
+  distinct(ticket_id, .keep_all = TRUE)
+```
+
+4. Exploratory Analysis (Aaron Norris)
+
+```{r analysis}
+
+# TODO: Add basic summaries and quick checks.
+
+```
+
+5. Heatmap Visualization (Divyani Tangudu)
+5.1 Gainesville Heatmap
+```{r Gainesville Heatmap}
+
+# TODO (Person C): Create a heatmap for Gainesville.
+
+```
+
+5.2 Miami Heatmap
+```{r Miami Heatmap}
+
+# TODO (Person C or D): Create a heatmap for Miami.
+
+```
+
+6. Text Mining & Wordclouds (Max De Cuba)
+
+6.1 Text Cleaning Helper
+```{r Text Clean}
+
+gainesData <- read.csv("GainesvilleData_clean.csv", stringsAsFactors = FALSE)
+miamiData <- read.csv("MiamiData_clean.csv", stringsAsFactors = FALSE)
+
+# lookup table to translate Miami issue_type codes into readable labels
+miamiisslook <- data.frame(
+  issue_type = c(
+    "COMPWTT","GARCONDM","COMSWRCD","COMCECUI","COMCEPKC","COMCENCU","COMTRSHM",
+    "COMCEILD","COMPWTH","COMIDPRT","COMSWCB","COMCEOGL","COMSCROSS","COMDANPU",
+    "COMCEBLM","COMRCYMS","COMSGRAD","GARBAGE1","GARBCSM","COMCEBRT","COMCEILS",
+    "COMTRACO","POCHGRAZ","COMFCUIN","NOISEVIO","COMSWKDM","COMPWPH","BEEWASP",
+    "TRLEAN","MANHOLE","ZONCALLB","COMSWSER","COMCEILU","COMBUUST","COMSHOPP",
+    "COMPWSF","ROADDEB1","COMGRAFF","COMCEILC","TREDDON","COMOTHER","COMSWRCS",
+    "COMCESGN","TREEDOWN","COMTREEBR","COMINPRO","COMSQUAT","TRASH","STRUMPRE",
+    "MOWING","COMCEVUS","COMCEABV","COMCEIMR","COMCETRE","COMBIC","COMTREEP",
+    "TREEBLOT","COMCECCV","COMCANAL","CAVESINK","COMCEPKU","COMSWIH","TREEFELL",
+    "ROADDEBR","COMTRETK","COMGRAMI"
+  ),
+  issue_label = c(
+    "Public Works – Trash Toter Issue", "Garbage – Container Damaged",
+    "Solid Waste – Recycling Not Collected",
+    "Code Enforcement – Curbside/Container Issue",
+    "Code Enforcement – Parking Complaint",
+    "Code Enforcement – Nuisance Complaint",
+    "Transportation – Trash in Street",
+    "Code Enforcement – Illegal Dumping",
+    "Public Works – Trash Pickup Missed (Household)",
+    "Code Enforcement – Improper Debris Placement",
+    "Solid Waste – Container Broken", "Code Enforcement – Overgrown Lot",
+    "Traffic – Crosswalk or Signal Issue",
+    "Code Enforcement – Dangerous or Unsafe Structure",
+    "Code Enforcement – Building Maintenance", "Recycling – Missed Pickup",
+    "Stormwater – Street Drainage", "Garbage – General Garbage Issue",
+    "Garbage – Missed Household Pickup",
+    "Code Enforcement – Brush/Tree Trimming Needed",
+    "Code Enforcement – Illegal Sign", "Transportation – Traffic Complaint",
+    "Pothole / Grazing Damage",
+    "Facilities – Customer Service / Utility Inquiry", "Noise Violation",
+    "Solid Waste – Yard Debris Missed", "Public Works – Pothole Repair",
+    "Bee or Wasp Infestation", "Transportation – Leaning Sign",
+    "Public Works – Manhole Issue", "Zoning – Call Back Requested",
+    "Solid Waste – Service Complaint",
+    "Code Enforcement – Illegal Use of Property",
+    "Code Enforcement – Business Unlicensed",
+    "Code Enforcement – Shop/Commercial Complaint",
+    "Public Works – Street Flooding", "Roadway – Debris on Roadway",
+    "Graffiti Removal", "Code Enforcement – Illegal Construction",
+    "Tree Damage on Right-of-Way", "Other / General Service Request",
+    "Solid Waste – Recycling Service Complaint",
+    "Code Enforcement – Sign Violation", "Tree Down", "Tree Branch/Tree Broken",
+    "Code Enforcement – Inoperative Vehicle",
+    "Trespassing / Squatter Complaint", "Trash (General Request)",
+    "Stump Removal Requested", "Grass or Lawn Mowing Request",
+    "Code Enforcement – Vacant/Unsecure Structure",
+    "Code Enforcement – Above Ground Violation",
+    "Code Enforcement – Improper Maintenance",
+    "Code Enforcement – Tree Complaint", "Bike Lane / Bicycle Facility Issue",
+    "Tree Planting Request", "Tree Blight / Disease",
+    "Code Enforcement – Commercial Vehicle Violation",
+    "Canal Drainage / Waterway Issue", "Cave-in / Sinkhole",
+    "Code Enforcement – Parking Violation", "Solid Waste – Illegal Hauling",
+    "Tree Fell / Fallen Tree", "Road Debris", "Tree Trimming Request",
+    "Graffiti – Misdemeanor"
+  ),
+  stringsAsFactors = FALSE
+)
+
+miamiData <- merge(miamiData, miamiisslook, by = "issue_type", all.x = TRUE)
+
+# function to replace en-dashes with spaces
+chantoSpace <- content_transformer(function(x, pattern) {
+  gsub(pattern, " ", x)
+})
+
+# cleaning function
+cleanText <- function(corpus_obj) {
+  corpus_obj <- tm_map(corpus_obj, chantoSpace, "–")
+  corpus_obj <- tm_map(corpus_obj, content_transformer(tolower))
+  corpus_obj <- tm_map(corpus_obj, removePunctuation)
+  corpus_obj <- tm_map(corpus_obj, removeNumbers)
+  corpus_obj <- tm_map(corpus_obj, stripWhitespace)
+  
+# custom stopword handling
+  important <- c("trash","garbage","tree","noise","debris","pothole",
+                 "code","enforcement","illegal","repair","cart","container")
+  base_stops <- setdiff(stopwords("en", source = "snowball"), important)
+  corpus_obj <- tm_map(corpus_obj, removeWords, base_stops)
+  return(corpus_obj)
+}
+# add margin space for labels
+par(mar = c(1, 1, 2, 1))
+```
+
+6.2 Gainesville Wordcloud
+```{r Gainesville Wordcloud}
+
+# ------------------------------------
+# Gainesville comparison cloud section
+
+# collapse all request types/descriptions into one big string
+gainesReqAll  <- paste(gainesData$request_type, collapse = " ")
+gainesDescAll <- paste(gainesData$description, collapse = " ")
+
+# create vector with two documents
+gainesDocs <- c(RequestType = gainesReqAll, Description = gainesDescAll)
+
+# make a corpus and clean it
+gainesCorpus <- Corpus(VectorSource(gainesDocs))
+gainesClean  <- cleanText(gainesCorpus)
+
+# TermDocument Matrix
+gainesTDM <- TermDocumentMatrix(gainesClean)
+gainesM   <- as.matrix(gainesTDM)
+
+# label columns
+colnames(gainesM) <- c("Request Type", "Description")
+
+# Gainesville comparison cloud
+comparison.cloud(
+  gainesM,
+  max.words = 100,
+  colors = c("steelblue3", "darkorange2"),
+  title.size = 1.5
+)
+```
+
+6.3 Miami Wordcloud
+```{r Miami Wordcloud}
+
+# ------------------------------
+# Miami comparison cloud section
+
+miamiTypeAll  <- paste(miamiData$issue_label, collapse = " ")
+miamiDescAll  <- paste(miamiData$issue_description, collapse = " ")
+
+miamiDocs <- c(IssueType = miamiTypeAll, Description = miamiDescAll)
+
+miamiCorpus <- Corpus(VectorSource(miamiDocs))
+miamiClean  <- cleanText(miamiCorpus)
+
+miamiTDM <- TermDocumentMatrix(miamiClean)
+miamiM   <- as.matrix(miamiTDM)
+
+colnames(miamiM) <- c("Issue Type", "Description")
+
+comparison.cloud(
+  miamiM,
+  max.words = 100,
+  colors = c("firebrick2", "deepskyblue3"),
+  title.size = 1.5
+)
+```
+
+7. Summary of Findings
+
+Section for a short written summary of:
+
+main patterns found in Gainesville
+
+main patterns found in Miami
+
+how the heatmaps and wordclouds support conclusions
+
+how this ties back to course content (Weeks 2, 3, 5, 7, etc.)
